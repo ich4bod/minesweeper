@@ -232,6 +232,61 @@ body {
 .help ul { margin: 8px 0 0; padding-left: 20px; }
 .help li { margin: 3px 0; }
 
+/* ---- back-link to the parent site ---- */
+
+/* This app lives at its own name under ichabod-crane.net and should say so.
+   Styled from this app's palette, not the parent's — same slate ground, same
+   system sans — with one borrowed detail: the hover is the parent site's
+   lantern amber, which is the only thing the two pages have in common. */
+
+.home {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid #313944;
+  width: 100%;
+  max-width: 520px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.home a {
+  color: #9aa3ae;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  transition: color .12s, border-color .12s;
+}
+
+.home a:hover,
+.home a:focus-visible {
+  color: #c9973f;
+  border-bottom-color: rgba(201, 151, 63, .5);
+}
+
+.home-arrow {
+  margin-right: 4px;
+  /* The arrow slides toward the parent on hover — the only motion here. */
+  display: inline-block;
+  transition: transform .12s;
+}
+
+.home a:hover .home-arrow { transform: translateX(-2px); }
+
+.home-domain { color: #cfd6de; }
+.home a:hover .home-domain { color: inherit; }
+
+.home-alt { opacity: .75; font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .home a, .home-arrow { transition: none; }
+  .home a:hover .home-arrow { transform: none; }
+}
+
 @media (max-width: 640px) {
   :root { --cell: 24px; }
   .title { font-size: 22px; }
