@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Minesweeper</title>
+<meta name="description" content="Classic Minesweeper — beginner, intermediate and expert.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c0c0c0'/%3E%3Ccircle cx='16' cy='17' r='8' fill='%23202020'/%3E%3Crect x='14.5' y='3' width='3' height='7' fill='%23202020'/%3E%3Ccircle cx='13' cy='14' r='2' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <h1 class="title">Minesweeper</h1>
+
+    <div class="difficulty" role="group" aria-label="Difficulty">
+      <button type="button" class="diff-btn" data-difficulty="beginner">Beginner<span>9 × 9 · 10</span></button>
+      <button type="button" class="diff-btn" data-difficulty="intermediate">Intermediate<span>16 × 16 · 40</span></button>
+      <button type="button" class="diff-btn" data-difficulty="expert">Expert<span>30 × 16 · 99</span></button>
+    </div>
+
+    <div class="frame">
+      <div class="hud">
+        <div class="readout" id="mine-count" aria-label="Mines remaining" role="status">010</div>
+        <button type="button" class="face" id="reset" aria-label="New game" title="New game">🙂</button>
+        <div class="readout" id="timer" aria-label="Time elapsed" role="status">000</div>
+      </div>
+      <div class="board-wrap">
+        <div class="board" id="board" role="grid" aria-label="Minefield"></div>
+      </div>
+    </div>
+
+    <p class="status" id="status" role="status" aria-live="polite">Left-click to reveal. Right-click to flag.</p>
+
+    <details class="help">
+      <summary>How to play</summary>
+      <ul>
+        <li><b>Left-click</b> a covered square to reveal it.</li>
+        <li><b>Right-click</b> (or long-press on touch) toggles a flag.</li>
+        <li><b>Left-click a revealed number</b> whose flags already match it to clear the squares around it.</li>
+        <li>A number counts the mines in the eight neighbouring squares.</li>
+        <li>Your first click is always safe — it opens a region.</li>
+        <li>Reveal every square that is not a mine to win.</li>
+      </ul>
+    </details>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

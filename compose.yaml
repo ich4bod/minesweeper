@@ -1,0 +1,35 @@
+name: minesweeper
+
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    # No published host port. Traefik reaches the container over the proxy
+    # network, so exposing one would only open a second, unrouted door.
+    expose:
+      - "3000"
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.minesweeper.rule=Host(`minesweeper.ichabod-crane.net`)"
+      - traefik.http.routers.minesweeper.entrypoints=websecure
+      - traefik.http.routers.minesweeper.tls.certresolver=letsencrypt
+      - traefik.http.services.minesweeper.loadbalancer.server.port=3000
+    cpus: "0.50"
+    mem_limit: 512m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  proxy:
+    external: true
+    name: ichabod-proxy
