@@ -1,0 +1,9 @@
+<!-- The same mine that was inlined as a data: URI in index.html. It is a file
+     now because link-preview scrapers will not follow a data: URI for the
+     site icon, and fall back to a third-party favicon proxy instead. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#c0c0c0"/>
+  <circle cx="16" cy="17" r="8" fill="#202020"/>
+  <rect x="14.5" y="3" width="3" height="7" fill="#202020"/>
+  <circle cx="13" cy="14" r="2" fill="#fff"/>
+</svg>
