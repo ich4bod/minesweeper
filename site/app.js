@@ -13,6 +13,7 @@
   var timerEl  = document.getElementById('timer');
   var faceEl   = document.getElementById('reset');
   var statusEl = document.getElementById('status');
+  var bestEl   = document.getElementById('best-time');
   var diffBtns = Array.prototype.slice.call(document.querySelectorAll('.diff-btn'));
 
   var cols, rows, total, mineCount;
@@ -46,6 +47,54 @@
     return out;
   }
 
+  /* ---------- best times ---------- */
+
+  // Best time per difficulty, in whole seconds, kept in localStorage under one
+  // versioned key. Storage is not guaranteed to be there: Safari's private mode
+  // and a user who has turned site data off both *throw* on access rather than
+  // returning null, so every touch is guarded. A browser without storage plays
+  // the game normally and simply never keeps a record.
+  var BEST_KEY = 'minesweeper.best.v1';
+
+  function readBests() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(BEST_KEY));
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function bestFor(which) {
+    var v = readBests()[which];
+    return (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.floor(v) : null;
+  }
+
+  function clock(secs) {
+    return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+  }
+
+  function renderBest() {
+    var b = bestFor(difficulty);
+    bestEl.textContent = b === null ? '—' : clock(b);
+  }
+
+  // Only a win gets here, and only a strictly faster one is written.
+  // Returns true when this run set the record, so the win message can say so.
+  function recordBest(secs) {
+    var prev = bestFor(difficulty);
+    if (prev !== null && secs >= prev) return false;
+    var bests = readBests();
+    bests[difficulty] = secs;
+    try {
+      window.localStorage.setItem(BEST_KEY, JSON.stringify(bests));
+    } catch (e) {
+      return false;
+    }
+    renderBest();
+    return true;
+  }
+
   /* ---------- setup ---------- */
 
   function newGame(which) {
@@ -71,6 +120,7 @@
       b.setAttribute('aria-pressed', String(b.dataset.difficulty === difficulty));
     });
 
+    renderBest();
     buildGrid();
     faceEl.textContent = '🙂';
     setStatus('Left-click to reveal. Right-click to flag.', '');
@@ -278,7 +328,10 @@
     updateMineCount();
     boardEl.classList.add('over');
     faceEl.textContent = '😎';
-    setStatus('Cleared! ' + mineCount + ' mines in ' + elapsed() + ' seconds.', 'win');
+    var secs = elapsed();
+    var improved = recordBest(secs);
+    setStatus('Cleared! ' + mineCount + ' mines in ' + secs + ' seconds.' +
+              (improved ? ' A new best.' : ''), 'win');
   }
 
   /* ---------- input ---------- */
@@ -353,10 +406,13 @@
         cols: cols, rows: rows, mines: mineCount,
         seeded: seeded, over: over, won: won,
         flags: flags, revealed: revealed,
-        remaining: total - mineCount - revealed
+        remaining: total - mineCount - revealed,
+        best: bestFor(difficulty),
+        bestShown: bestEl.textContent
       };
     },
-    mineAt: function (i) { return board[i].mine; }
+    mineAt: function (i) { return board[i].mine; },
+    bests: readBests
   };
 
   newGame('beginner');

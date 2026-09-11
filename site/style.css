@@ -146,6 +146,34 @@ body {
   border-color: var(--shadow) var(--light) var(--light) var(--shadow);
 }
 
+/* ---- best time ---- */
+
+/* Sits in the grey chrome under the timer, which is the readout it is about.
+   The row is always drawn, showing an em dash until there is a record, so the
+   board does not jump down the page the first time someone wins. */
+
+.best {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+
+.best-time {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  color: #2f2f2f;
+}
+
 /* ---- board ---- */
 
 .board-wrap {
