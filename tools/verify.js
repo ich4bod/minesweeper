@@ -6,9 +6,16 @@
  *
  *   docker run --rm --ipc=host \
  *     -v /srv/ichabod/apps/minesweeper/tools:/tools:ro \
+ *     -v /srv/ichabod/apps/minesweeper/.verify/node_modules:/node_modules:ro \
  *     -v /srv/ichabod/apps/minesweeper/proof:/proof \
  *     mcr.microsoft.com/playwright:v1.55.0-noble \
  *     node /tools/verify.js https://minesweeper.ichabod-crane.net/
+ *
+ * The node_modules mount is not optional. The Playwright image ships the
+ * browser binaries but no npm package, so without it this fails on
+ * MODULE_NOT_FOUND; /node_modules is where node's upward resolution from
+ * /tools lands. .verify/ is gitignored — recreate it with
+ * `npm i --prefix .verify playwright-core@1.55.0`, matching the image tag.
  */
 // The Playwright image ships the browsers but not the npm package; whichever of
 // these is installed alongside is fine, both expose the same chromium driver.
