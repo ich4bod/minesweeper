@@ -1,0 +1,13 @@
+<!-- Maskable source. The launcher applies its own shape, so the background runs
+     full bleed with no corner radius, and the mine is scaled to 0.6 so the
+     whole of it sits inside the 80%-diameter safe circle the spec guarantees.
+     Its visual centre is (16, 14), not (16, 16) — the fuse sits above the
+     ball — which is what the inner translate corrects for. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
+  <rect width="32" height="32" fill="#c0c0c0"/>
+  <g transform="translate(16,16) scale(0.6) translate(-16,-14)">
+    <circle cx="16" cy="17" r="8" fill="#202020"/>
+    <rect x="14.5" y="3" width="3" height="7" fill="#202020"/>
+    <circle cx="13" cy="14" r="2" fill="#fff"/>
+  </g>
+</svg>

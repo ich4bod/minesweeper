@@ -28,14 +28,19 @@ Live: <https://minesweeper.ichabod-crane.net>
 ## Layout
 
 ```
-site/index.html   markup
-site/style.css    styling
-site/app.js       all game logic
-site/favicon.svg  the mine, as a file
-site/og.png       1200×630 link-preview card — generated, see below
-nginx.conf        :3000, plus a /healthz endpoint for the container healthcheck
-Dockerfile        nginx:1.27-alpine + the static files
-compose.yaml      Traefik labels, cpus 0.50, mem_limit 512m
+site/index.html             markup
+site/style.css              styling
+site/app.js                 all game logic
+site/favicon.svg            the mine, as a file
+site/og.png                 1200×630 link-preview card — generated, see below
+site/manifest.json          web app manifest — makes the game installable
+site/sw.js                  service worker — makes it playable offline
+site/icon.svg               install-icon source, "any" purpose
+site/icon-maskable.svg      install-icon source, "maskable" purpose
+site/icon-*.png             rasterised from those two by tools/make-icons.js
+nginx.conf                  :3000, /healthz, and no-cache on /sw.js
+Dockerfile                  nginx:1.27-alpine + the static files
+compose.yaml                Traefik labels, cpus 0.50, mem_limit 512m
 ```
 
 ## Link preview
@@ -61,6 +66,66 @@ as, because preview scrapers will not follow a `data:` URI for the site icon
 — they fall back to a third-party favicon proxy instead, which was observed
 happening before this changed.
 
+## Installable, and playable offline
+
+The game is installable from the browser's own menu and keeps working with no
+network. There is no API and no CDN behind it, so "offline" only ever meant
+holding on to five small files.
+
+**The service worker is network-first, deliberately.** Cache-first is the usual
+advice and it is the wrong trade here: it lets a deploy go out, look green, and
+never reach a returning player, because their browser keeps answering from
+yesterday's `app.js`. Network-first cannot do that — online, the browser always
+sees what nginx is serving now, and the cache is consulted only when the fetch
+fails or the server answers badly. The cost is that the worker buys offline
+support and no speed at all. For five files off a local nginx, speed was never
+the problem worth solving.
+
+Two consequences worth knowing before changing any of it:
+
+- `VERSION` in `sw.js` governs **only** when the install-time precache is
+  rebuilt and older caches evicted. It is not what keeps clients fresh, so
+  forgetting to bump it cannot ship stale code.
+- `nginx.conf` serves `/sw.js` with `Cache-Control: no-cache`, so a deploy can
+  always replace the worker that caches the deploy. Its `add_header` lines
+  repeat the site-wide security headers on purpose: nginx does not merge
+  `add_header` with an outer block's, so declaring one in a `location` drops
+  all of the ones above it.
+
+### Icons
+
+`site/icon-192.png`, `icon-512.png` and `icon-maskable-512.png` are generated
+from the two SVGs next to them. There is no ImageMagick, PIL or sharp on the
+host and no reason to add one — the Playwright image already contains a better
+SVG renderer than any of them:
+
+```sh
+docker run --rm --ipc=host \
+  -v "$PWD/tools:/tools:ro" \
+  -v "$PWD/.verify/node_modules:/node_modules:ro" \
+  -v "$PWD/site:/site" \
+  mcr.microsoft.com/playwright:v1.55.0-noble node /tools/make-icons.js
+```
+
+### Verifying it
+
+`tools/verify-offline.sh` proves the offline claim rather than asserting it. It
+primes a persistent browser profile against the live site, **stops the
+container**, and then loads and plays a full game to a win with nothing behind
+Traefik at all — if a board renders, it came out of the Cache API, because
+there is nothing else left to serve it. It then restarts the container with a
+marker freshly appended to `style.css` and checks the page sees the new byte,
+which is the stale-cache failure above, tested rather than argued.
+
+```sh
+tools/verify-offline.sh
+```
+
+Do not reach for `context.setOffline()` to shortcut this. It does not apply to
+fetches a service worker makes; an earlier version of the test used it and every
+offline assertion passed while its own control check — "the network is genuinely
+down" — failed, which is the shape of a test that proves nothing.
+
 ## Deploy
 
 Traefik must already be running with the external `ichabod-proxy` network.
@@ -71,6 +136,13 @@ docker compose up -d --build
 
 DNS for `*.ichabod-crane.net` is a wildcard A record pointing at the host, so a new
 hostname needs no DNS work; Traefik requests the certificate on first request.
+
+Recreating the container opens a routing gap of roughly 20 seconds during which
+Traefik serves its own `404 page not found` — and, at the edges of it, a stale
+200 from the container it is about to drop. Neither is a failed deploy. When
+scripting anything against the site straight after `up -d`, poll for the state
+you want several times in a row before believing it; a single matching response
+is not evidence. `wait_for` in `tools/verify-offline.sh` is that poll.
 
 ## Testing hook
 

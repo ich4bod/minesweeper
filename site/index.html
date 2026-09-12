@@ -29,6 +29,16 @@
 
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
+
+<!-- Installable, and playable with the network off. sw.js is network-first, so
+     it changes nothing about an online load except that it fills a cache on
+     the way past; the comment at the top of sw.js says why that direction. -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1d2126">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Minesweeper">
 </head>
 <body>
   <main class="app">
@@ -76,5 +86,17 @@
   </main>
 
   <script src="app.js"></script>
+  <script>
+    // Registered after load so it never competes with the first paint, and
+    // guarded because serviceWorker is absent on http:// and in older
+    // browsers — the game must keep working where it is missing.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function (err) {
+          console.warn('[sw] registration failed', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
