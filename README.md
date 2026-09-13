@@ -17,6 +17,82 @@ Live: <https://minesweeper.ichabod-crane.net>
 - Win when every non-mine square is revealed; the remaining mines are auto-flagged.
 - Loss reveals every mine and marks wrong flags with ✗.
 - **Daily** deals one shared board per UTC date — see below.
+- **The whole game is playable from the keyboard** — see below.
+
+## Playing without a mouse
+
+Every rule above is reachable from the keyboard. `Tab` once to reach the board,
+then:
+
+| Key | Does |
+|---|---|
+| `←` `↑` `↓` `→` | move a square |
+| `Home` / `End` | first / last square of the row |
+| `Ctrl+Home` / `Ctrl+End` | first / last square of the board |
+| `PageUp` / `PageDown` | top / bottom of the column |
+| `Enter` or `Space` | reveal — or chord, on a revealed number |
+| `F` | flag or unflag |
+| `R` | new game, from anywhere on the page |
+
+`Enter` takes the same branch as a left-click, deliberately: the two paths
+decide "chord or reveal" in one place so they cannot drift apart.
+
+Three things about this were less obvious than they look.
+
+**The board is one tab stop, not 480.** A roving `tabindex` keeps exactly one
+square in the tab order and moves it with the caret. The alternative —
+`tabindex="0"` on every cell — makes `Tab` alone take 480 presses to get past
+an expert board, which is worse than no keyboard support at all.
+
+**`newGame()` rebuilds every cell, and that is what nearly broke it.** Focus
+lives on a DOM node, so a rebuild that ignored it would drop the caret to
+`<body>` and leave the board unreachable without ever looking broken — no
+error, no visual change, the game simply over for anyone not holding a mouse.
+`buildGrid()` therefore asks whether the board held focus *before* it discards
+the old nodes, and restores it after. A resize is the one case that
+deliberately does not restore: square 400 on expert is not square 400 on
+beginner and on beginner does not exist, so changing difficulty recentres the
+caret instead. `tools/verify-keyboard.js` tests the rebuild directly, because
+it is the part most likely to rot.
+
+**The cells now sit inside `role="row"` wrappers.** A `role="grid"` whose
+gridcells are not in rows is malformed and announces no coordinates at all. The
+wrappers are `display: contents`, so the cells remain direct grid items of
+`.board` and the column template still lays them out — the rendered page is
+byte-identical. Each cell also carries an `aria-label` (`covered`, `flagged`,
+`empty`, or its number), because a covered square is an empty `<div>` that a
+screen reader otherwise walks straight past in silence.
+
+The focus ring is amber rather than the usual blue, which would disappear into
+the blue of a `1`, and is drawn *inside* the cell with a negative
+`outline-offset` because a 27px square in a gapless grid has no room outside
+itself. It is `:focus-visible`, so clicking a square does not leave a ring
+behind for a mouse player who never asked for one.
+
+### Verifying it
+
+`tools/verify-keyboard.js` plays a full game to a win on real key events and
+proves the mouse was not involved, rather than asserting it: the page records
+every `mousedown`, `click`, `pointerdown`, `contextmenu` and friends it sees in
+the capture phase, and the run fails if the list is not empty. Merely *not
+calling* `click()` would prove nothing — Playwright's `focus()`, `hover()` and
+`scrollIntoViewIfNeeded()` all reach for the pointer, and any one of them
+creeping in would quietly turn this back into the mouse test that already
+exists.
+
+One allowance, and it stops at the edge of the board: pressing `Enter` on a
+focused `<button>` makes the browser synthesise a `click` on it, which is what
+a button is for. Those carry `detail === 0` and are ignored — but only outside
+`#board`, where the squares are `<div>`s and no key can produce a click on one.
+
+```sh
+docker run --rm --ipc=host \
+  -v /srv/ichabod/apps/minesweeper/tools:/tools:ro \
+  -v /srv/ichabod/apps/minesweeper/.verify/node_modules:/node_modules:ro \
+  -v /srv/ichabod/apps/minesweeper/proof:/proof \
+  mcr.microsoft.com/playwright:v1.55.0-noble \
+  node /tools/verify-keyboard.js https://minesweeper.ichabod-crane.net/
+```
 
 ## Daily boards
 
@@ -218,6 +294,11 @@ is not evidence. `wait_for` in `tools/verify-offline.sh` is that poll.
 `window.minesweeper` exposes `newGame`, `reveal`, `toggleFlag`, `chord`, `state()`
 and `mineAt(i)` so a game can be driven and inspected from the console or a
 headless browser without synthesising clicks.
+
+Nothing about the keyboard is exposed here and nothing needs to be:
+`verify-keyboard.js` reads the focused square off `document.activeElement` and
+the tab order off `#board [tabindex="0"]`, both of which are the real thing
+rather than a hook that could pass while the feature is broken.
 
 For daily boards it also exposes `layout()` — the whole minefield as one string
 of `1`s and `0`s, which is how two deals are compared for being the same deal —

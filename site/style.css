@@ -282,6 +282,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Carries role="row", so the grid is a valid one, and does nothing else.
+   `contents` keeps the cells as direct grid items of .board, so the column
+   template above still lays them out and every .cell rule below is untouched. */
+.row { display: contents; }
+
 .cell {
   width: var(--cell);
   height: var(--cell);
@@ -323,6 +328,28 @@ body {
 
 .board.over .cell { cursor: default; }
 
+/* Keyboard focus. The board is a single tab stop with a roving tabindex inside
+   it, so this ring is the *only* thing telling a keyboard player where they
+   are — it has to read on a raised covered square, a sunken revealed one and a
+   red detonated one alike, which is why it is amber rather than a blue that
+   disappears into .n1. Drawn inside the cell with a negative offset because a
+   27px cell in a gapless grid has no room outside itself, and raised above its
+   neighbours so the ring is not half-covered by the next cell's border.
+   :focus-visible, not :focus, so clicking a square does not leave a ring
+   behind for a mouse player who never asked for one. */
+.cell:focus { outline: none; }
+
+.cell:focus-visible {
+  outline: 3px solid #ffb300;
+  outline-offset: -3px;
+  z-index: 1;
+}
+
+/* Forced-colours mode throws the amber away; this keeps a ring there. */
+@media (forced-colors: active) {
+  .cell:focus-visible { outline: 3px solid Highlight; }
+}
+
 /* ---- footer ---- */
 
 .status {
@@ -345,6 +372,23 @@ body {
 .help summary { cursor: pointer; }
 .help ul { margin: 8px 0 0; padding-left: 20px; }
 .help li { margin: 3px 0; }
+
+.help kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.4;
+  white-space: nowrap;
+  background: var(--face);
+  /* The cap is a light grey borrowed from the squares, so the legend has to
+     stop inheriting the page's light --ink and go dark, or it vanishes. */
+  color: var(--page);
+  border-top: 1px solid var(--light);
+  border-left: 1px solid var(--light);
+  border-right: 1px solid var(--shadow);
+  border-bottom: 1px solid var(--shadow);
+}
 
 /* ---- back-link to the parent site ---- */
 

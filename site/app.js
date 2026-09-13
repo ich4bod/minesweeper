@@ -34,6 +34,7 @@
   var mode = 'random';  // 'random' | 'daily'
   var dailyDate;        // 'YYYY-MM-DD', UTC
   var dailyAnchor = -1; // the opening square a daily deal hands everyone
+  var focusIdx = -1;    // the one cell holding tabindex="0"; -1 means "recentre"
 
   /* ---------- helpers ---------- */
 
@@ -296,6 +297,12 @@
   function newGame(which) {
     if (which) difficulty = which;
     var cfg = DIFFICULTIES[difficulty];
+
+    // A new game on the same difficulty leaves the caret where the player left
+    // it; a *resize* recentres it, because square 400 on expert and square 400
+    // on beginner are not the same place and one of them does not exist.
+    if (cols !== cfg.cols || rows !== cfg.rows) focusIdx = -1;
+
     cols = cfg.cols; rows = cfg.rows; mineCount = cfg.mines;
     total = cols * rows;
 
@@ -331,25 +338,72 @@
       setStatus('Daily board for ' + dailyDate + '. Everyone gets this one.', '');
     } else {
       dailyAnchor = -1;
-      setStatus('Left-click to reveal. Right-click to flag.', '');
+      setStatus('Left-click to reveal. Right-click to flag. Or Tab to the board and use the arrow keys.', '');
     }
   }
 
   function buildGrid() {
     boardEl.classList.remove('over');
     boardEl.style.gridTemplateColumns = 'repeat(' + cols + ', var(--cell))';
+
+    // Asked *before* the old cells are thrown away. newGame() rebuilds the
+    // whole board, and a rebuild that ignored this would drop focus to <body>
+    // — which for a player without a mouse is the game quietly ending.
+    var hadFocus = boardEl.contains(document.activeElement);
+
     var frag = document.createDocumentFragment();
     cells = new Array(total);
-    for (var i = 0; i < total; i++) {
-      var d = document.createElement('div');
-      d.className = 'cell';
-      d.setAttribute('role', 'gridcell');
-      d.dataset.i = String(i);
-      cells[i] = d;
-      frag.appendChild(d);
+    for (var y = 0; y < rows; y++) {
+      // A role="grid" whose gridcells are not wrapped in a role="row" is
+      // malformed, and a screen reader reading one announces no coordinates at
+      // all. The row is `display: contents`, so it carries the role without
+      // joining the layout — the cells stay direct grid items of .board and
+      // every existing rule about them still applies.
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.setAttribute('role', 'row');
+      for (var x = 0; x < cols; x++) {
+        var i = y * cols + x;
+        var d = document.createElement('div');
+        d.className = 'cell';
+        d.setAttribute('role', 'gridcell');
+        // Covered squares carry no text, so without a label a screen reader
+        // walks the board in silence. paint() keeps this in step afterwards.
+        d.setAttribute('aria-label', 'covered');
+        d.tabIndex = -1;
+        d.dataset.i = String(i);
+        cells[i] = d;
+        row.appendChild(d);
+      }
+      frag.appendChild(row);
     }
     boardEl.textContent = '';
     boardEl.appendChild(frag);
+
+    // Roving tabindex: exactly one cell is ever in the tab order, so Tab
+    // reaches the board in one press and leaves it in one more, rather than
+    // walking a player through 480 stops on expert.
+    if (!(focusIdx >= 0 && focusIdx < total)) focusIdx = centreIdx();
+    cells[focusIdx].tabIndex = 0;
+    if (hadFocus) cells[focusIdx].focus();
+  }
+
+  // Where the caret starts, and where it returns after the board resizes. The
+  // centre rather than the corner: on a fresh board Tab then Enter is then the
+  // opening move a mouse player would have made anyway.
+  function centreIdx() {
+    return Math.floor(rows / 2) * cols + Math.floor(cols / 2);
+  }
+
+  // Moves the single tab stop, and the caret with it. The two must not drift:
+  // a tabindex="0" left behind on a cell the player has walked away from puts
+  // a second stop in the tab order.
+  function moveFocus(i) {
+    if (i < 0 || i >= total) return;
+    if (cells[focusIdx]) cells[focusIdx].tabIndex = -1;
+    focusIdx = i;
+    cells[i].tabIndex = 0;
+    cells[i].focus();
   }
 
   // `rand` is the source of randomness, defaulting to Math.random. Daily mode
@@ -393,24 +447,33 @@
     var el = cells[i];
     var cls = 'cell';
     var text = '';
+    var label = 'covered';
 
     if (cell.state === 'revealed') {
       cls += ' revealed';
       if (cell.mine) {
         text = '💣';
+        label = 'mine';
         if (cell.hit) cls += ' mine-hit';
       } else if (cell.adj > 0) {
         text = String(cell.adj);
+        label = String(cell.adj);
         cls += ' n' + cell.adj;
+      } else {
+        label = 'empty';
       }
     } else if (cell.state === 'flagged') {
       cls += ' flagged';
       text = cell.wrong ? '❌' : '🚩';
+      label = cell.wrong ? 'wrong flag' : 'flagged';
       if (cell.wrong) cls += ' mine-wrong';
     }
 
     el.className = cls;
     if (el.textContent !== text) el.textContent = text;
+    // The emoji is decoration; this is what actually gets announced. A covered
+    // square is an empty div and would otherwise be skipped over in silence.
+    if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
   }
 
   function paintAll() {
@@ -612,6 +675,78 @@
   boardEl.addEventListener('touchmove', cancelPress, { passive: true });
   boardEl.addEventListener('touchcancel', cancelPress);
 
+  /* ---------- keyboard ---------- */
+
+  // The board is one tab stop with a roving tabindex inside it, so everything
+  // below is bound to the board rather than the document: `f` flags only when
+  // the caret is actually on a square, and typing it anywhere else does
+  // nothing. Clicking a cell focuses it too, which is what keeps the caret
+  // under the pointer for a player using both.
+  boardEl.addEventListener('focusin', function (e) {
+    var i = indexFrom(e.target);
+    if (i >= 0 && i !== focusIdx) moveFocus(i);
+  });
+
+  var ARROWS = {
+    ArrowLeft:  [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp:    [0, -1],
+    ArrowDown:  [0, 1]
+  };
+
+  boardEl.addEventListener('keydown', function (e) {
+    var i = indexFrom(e.target);
+    if (i < 0) return;
+    if (e.altKey || e.metaKey) return;
+
+    var x = i % cols;
+    var y = (i - x) / cols;
+    var d = ARROWS[e.key];
+
+    // Clamped at the edges rather than wrapped. Holding an arrow to get to the
+    // far wall should stop at the wall — a caret that reappears on the
+    // opposite side of a minefield loses the player their place.
+    if (d) {
+      e.preventDefault();
+      moveFocus(Math.min(rows - 1, Math.max(0, y + d[1])) * cols +
+                Math.min(cols - 1, Math.max(0, x + d[0])));
+      return;
+    }
+
+    switch (e.key) {
+      case 'Home':
+        e.preventDefault();
+        moveFocus(e.ctrlKey ? 0 : y * cols);
+        return;
+      case 'End':
+        e.preventDefault();
+        moveFocus(e.ctrlKey ? total - 1 : y * cols + cols - 1);
+        return;
+      case 'PageUp':
+        e.preventDefault();
+        moveFocus(x);
+        return;
+      case 'PageDown':
+        e.preventDefault();
+        moveFocus((rows - 1) * cols + x);
+        return;
+      case 'Enter':
+      case ' ':
+        // Deliberately the same branch the click handler takes, so the mouse
+        // and the keyboard cannot drift apart: a revealed number chords,
+        // anything else reveals.
+        e.preventDefault();
+        if (board[i].state === 'revealed') chord(i);
+        else reveal(i);
+        return;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        toggleFlag(i);
+        return;
+    }
+  });
+
   faceEl.addEventListener('click', function () { newGame(); });
 
   diffBtns.forEach(function (b) {
@@ -648,6 +783,8 @@
     });
   });
 
+  // New game from anywhere on the page. The board's own keys are bound to the
+  // board, not here, precisely so they cannot fire while the caret is off it.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'r' || e.key === 'R') newGame();
   });
