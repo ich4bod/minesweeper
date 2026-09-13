@@ -70,7 +70,22 @@ self.addEventListener('fetch', (event) => {
   // Only this origin, and only GET. Anything else is passed straight through
   // to the network untouched.
   if (req.method !== 'GET') return;
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // A daily-board link is /?d=YYYY-MM-DD, so a cache keyed on the full URL
+  // would accumulate one copy of the same shell per date anybody visits.
+  // Those navigations go to the network and, offline, fall through to the
+  // cached /index.html — which is all they ever needed, since the date is
+  // read from the address bar rather than from the response.
+  if (url.search) {
+    event.respondWith(
+      fetch(req).catch(() =>
+        caches.match('/index.html').then((hit) => hit || Response.error())
+      )
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(req)

@@ -12,6 +12,11 @@
 
 * { box-sizing: border-box; }
 
+/* An author `display` beats the UA sheet's [hidden] rule no matter how it is
+   written, so anything toggled with the hidden attribute needs this to stay
+   hidden. .share sets display:flex and is toggled exactly that way. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -82,6 +87,87 @@ body {
   background: #3d4a5a;
   border-color: #6f8bb0;
 }
+
+/* ---- random / daily ---- */
+
+.mode {
+  display: flex;
+  gap: 0;
+  justify-content: center;
+  border: 1px solid #3a424c;
+  border-radius: 999px;
+  padding: 3px;
+  background: #21262e;
+}
+
+.mode-btn {
+  padding: 5px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: .6;
+  cursor: pointer;
+  transition: background .12s, opacity .12s;
+}
+
+.mode-btn:hover { opacity: 1; }
+
+.mode-btn[aria-pressed="true"] {
+  background: #3d4a5a;
+  opacity: 1;
+}
+
+.daily {
+  margin: -4px 0 0;
+  font-size: 13px;
+  opacity: .7;
+  text-align: center;
+}
+
+.daily b { font-variant-numeric: tabular-nums; }
+
+/* ---- share ---- */
+
+.share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: -6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #3a424c;
+  border-radius: 8px;
+  background: #21262e;
+}
+
+.share pre {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: left;
+  opacity: .85;
+}
+
+#share-copy {
+  padding: 6px 14px;
+  border: 1px solid #3a424c;
+  border-radius: 8px;
+  background: #262c34;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#share-copy:hover { background: #2f3742; }
 
 /* ---- frame ---- */
 

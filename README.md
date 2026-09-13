@@ -16,6 +16,56 @@ Live: <https://minesweeper.ichabod-crane.net>
 - Zero-adjacency squares flood-fill outward. Flags stop the flood, as they should.
 - Win when every non-mine square is revealed; the remaining mines are auto-flagged.
 - Loss reveals every mine and marks wrong flags with ✗.
+- **Daily** deals one shared board per UTC date — see below.
+
+## Daily boards
+
+`Daily` deals one shared minefield per UTC date: everyone who opens it on
+2026-09-13 gets the same 2026-09-13 board, so "41 seconds" is finally a number
+two people can compare. There is no backend and nothing stored — the board is
+regenerated from the date on each machine.
+
+The deal runs off a seeded PRNG (FNV-1a into mulberry32) rather than
+`Math.random()`, which explicitly does not promise the same sequence twice. The
+seed is `minesweeper|v1|<date>|<difficulty>` and nothing else, so each
+difficulty gets its own board for the day.
+
+**The opening square is part of the deal, and it has to be.** Random mode places
+mines *after* the first click so it can spare the square you clicked — which
+means the layout depends on where you clicked, and two players would get
+different minefields from the same date. So a daily board picks its opening
+square from the seed too, excludes it and its eight neighbours from the mine
+pool, and opens it for you before you touch anything. Everyone starts from an
+identical opened position, the first click is still always safe, and the layout
+depends on no choice the player makes. The clock starts on your first real
+click, not on that opening.
+
+Daily mode is addressable, not remembered:
+
+| URL | Board |
+|---|---|
+| `/` | random, as before |
+| `/?mode=daily` | today's daily, UTC |
+| `/?d=2026-09-13` | that date's daily — a past board, replayable |
+| `/?d=2026-09-13&level=expert` | that date's expert daily |
+
+Nothing about the mode is written to `localStorage`, deliberately: a shared link
+is then the only thing that puts you on a shared board, and a plain visit is
+never silently on yesterday's puzzle. An impossible date falls back to today —
+and note that `Date.parse` does *not* reject `2026-02-31`, it rolls it forward
+to 3 March, so the check round-trips the parsed date back to a string.
+
+Daily times live in `minesweeper.daily.v1`, keyed by date and difficulty, newest
+60 kept. They are held apart from the best-time records on purpose: a time on
+one specific board has no business competing with a lifetime best over random
+deals. Only wins are stored, so a bad opening guess does not brand the day as
+failed.
+
+`sw.js` answers any URL carrying a query string from the network and never
+caches it, because a cache keyed on the full URL would otherwise accumulate one
+copy of the same shell per date anybody visited. Offline those navigations fall
+through to the cached `/index.html`, which is all they ever needed — the date is
+read from the address bar, not from the response.
 
 ## Difficulties
 
@@ -126,6 +176,25 @@ fetches a service worker makes; an earlier version of the test used it and every
 offline assertion passed while its own control check — "the network is genuinely
 down" — failed, which is the shape of a test that proves nothing.
 
+### Verifying the daily board
+
+`tools/verify-daily.js` checks that a date really does determine a board, and
+that random mode did not quietly become deterministic alongside it. Every
+comparison is between **two fresh browser contexts**, not two `newGame()` calls
+in one page — the claim is reproducibility across independent loads, and a warm
+page shares far too much to prove it. Layouts are compared after a *forced*
+first click, since in random mode nothing is placed until one happens and two
+empty boards would otherwise match for the wrong reason.
+
+```sh
+docker run --rm --ipc=host \
+  -v /srv/ichabod/apps/minesweeper/tools:/tools:ro \
+  -v /srv/ichabod/apps/minesweeper/.verify/node_modules:/node_modules:ro \
+  -v /srv/ichabod/apps/minesweeper/proof:/proof \
+  mcr.microsoft.com/playwright:v1.55.0-noble \
+  node /tools/verify-daily.js https://minesweeper.ichabod-crane.net/
+```
+
 ## Deploy
 
 Traefik must already be running with the external `ichabod-proxy` network.
@@ -149,3 +218,8 @@ is not evidence. `wait_for` in `tools/verify-offline.sh` is that poll.
 `window.minesweeper` exposes `newGame`, `reveal`, `toggleFlag`, `chord`, `state()`
 and `mineAt(i)` so a game can be driven and inspected from the console or a
 headless browser without synthesising clicks.
+
+For daily boards it also exposes `layout()` — the whole minefield as one string
+of `1`s and `0`s, which is how two deals are compared for being the same deal —
+`shareText()`, `dailies()`, and `setDailyDate('YYYY-MM-DD')` for driving the
+date without waiting for tomorrow.

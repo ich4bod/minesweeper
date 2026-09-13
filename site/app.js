@@ -8,13 +8,20 @@
     expert:       { cols: 30, rows: 16, mines: 99 }
   };
 
-  var boardEl  = document.getElementById('board');
-  var mineEl   = document.getElementById('mine-count');
-  var timerEl  = document.getElementById('timer');
-  var faceEl   = document.getElementById('reset');
-  var statusEl = document.getElementById('status');
-  var bestEl   = document.getElementById('best-time');
+  var boardEl   = document.getElementById('board');
+  var mineEl    = document.getElementById('mine-count');
+  var timerEl   = document.getElementById('timer');
+  var faceEl    = document.getElementById('reset');
+  var statusEl  = document.getElementById('status');
+  var bestEl    = document.getElementById('best-time');
+  var bestLabel = document.getElementById('best-label');
+  var dailyEl   = document.getElementById('daily-line');
+  var dailyDateEl = document.getElementById('daily-date');
+  var shareEl   = document.getElementById('share');
+  var shareTextEl = document.getElementById('share-text');
+  var shareCopyEl = document.getElementById('share-copy');
   var diffBtns = Array.prototype.slice.call(document.querySelectorAll('.diff-btn'));
+  var modeBtns = Array.prototype.slice.call(document.querySelectorAll('.mode-btn'));
 
   var cols, rows, total, mineCount;
   var board;            // [{ mine, adj, state }]  state: 'hidden' | 'revealed' | 'flagged'
@@ -24,6 +31,9 @@
   var flags, revealed;
   var startTime, timerId;
   var difficulty = 'beginner';
+  var mode = 'random';  // 'random' | 'daily'
+  var dailyDate;        // 'YYYY-MM-DD', UTC
+  var dailyAnchor = -1; // the opening square a daily deal hands everyone
 
   /* ---------- helpers ---------- */
 
@@ -75,6 +85,11 @@
   }
 
   function renderBest() {
+    if (mode === 'daily') {
+      var d = dailyResult();
+      bestEl.textContent = d ? clock(d.secs) : '—';
+      return;
+    }
     var b = bestFor(difficulty);
     bestEl.textContent = b === null ? '—' : clock(b);
   }
@@ -93,6 +108,187 @@
     }
     renderBest();
     return true;
+  }
+
+  /* ---------- daily boards ---------- */
+
+  // A Daily board is the same board for everyone who plays that UTC date, which
+  // is the whole point: a time is only worth comparing if the minefield was.
+  // That needs a *reproducible* source of randomness, so the deal runs off a
+  // seeded PRNG rather than Math.random(), and the seed is derived from nothing
+  // but the date, the difficulty and a version tag. No server, no stored board
+  // — two browsers that agree on today's date agree on today's minefield.
+  //
+  // Bumping SEED_VERSION re-deals every past date, so it changes only if the
+  // generator itself has to change.
+  var SEED_VERSION = 'v1';
+
+  // FNV-1a, for turning the seed string into the 32 bits mulberry32 wants.
+  function hashSeed(str) {
+    var h = 2166136261 >>> 0;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  // mulberry32: 32 bits of state, no dependencies, and — the only property that
+  // matters here — identical output for identical input in every engine, which
+  // Math.random() explicitly does not promise.
+  function mulberry32(a) {
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function utcToday() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  // Strict YYYY-MM-DD, on the real calendar. The shape test and Date.parse are
+  // both necessary and together still not enough: Date.parse does not reject
+  // 2026-02-31, it rolls it forward to 3 March. Round-tripping the parsed date
+  // back to a string is what actually catches a day that does not exist.
+  function validDate(s) {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    var t = Date.parse(s + 'T00:00:00Z');
+    if (isNaN(t)) return false;
+    return new Date(t).toISOString().slice(0, 10) === s;
+  }
+
+  function seedFor(date, which) {
+    return 'minesweeper|' + SEED_VERSION + '|' + date + '|' + which;
+  }
+
+  /*
+   * Deals the whole board up front from the seeded stream and returns the
+   * opening square.
+   *
+   * Random mode places mines *after* the first click so it can spare the
+   * clicked square — which means the layout depends on where you clicked, and
+   * two players would get different minefields from the same seed. A shared
+   * board cannot work that way. So Daily picks the opening square from the
+   * seed too, excludes it and its eight neighbours from the mine pool, and
+   * opens it for you. Everyone starts from the identical opened position, the
+   * first click is still always safe, and the layout does not depend on any
+   * choice the player makes.
+   */
+  function dealDaily() {
+    var rng = mulberry32(hashSeed(seedFor(dailyDate, difficulty)));
+    var anchor = Math.floor(rng() * total);
+    placeMines(anchor, rng);
+    return anchor;
+  }
+
+  /* ---------- daily results ---------- */
+
+  // Kept apart from the best-time record on purpose: a Daily time is a time on
+  // one specific board and has no business competing with a lifetime best on
+  // random deals. Same storage caveats as readBests() — every touch is guarded.
+  var DAILY_KEY = 'minesweeper.daily.v1';
+  var DAILY_KEEP = 60;
+
+  function readDailies() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(DAILY_KEY));
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function dailyKey() {
+    return dailyDate + '|' + difficulty;
+  }
+
+  function dailyResult() {
+    var r = readDailies()[dailyKey()];
+    return (r && typeof r.secs === 'number' && isFinite(r.secs)) ? r : null;
+  }
+
+  // Wins only, fastest kept. A loss leaves no trace, so a bad opening guess
+  // does not brand the day as failed.
+  function recordDaily(secs) {
+    var all = readDailies();
+    var prev = all[dailyKey()];
+    if (prev && typeof prev.secs === 'number' && secs >= prev.secs) return false;
+    all[dailyKey()] = { secs: secs, won: true };
+
+    // The keys sort chronologically, so dropping the lexicographic tail drops
+    // the oldest dates. This is a scoreboard, not an archive.
+    var keys = Object.keys(all).sort();
+    while (keys.length > DAILY_KEEP) delete all[keys.shift()];
+
+    try {
+      window.localStorage.setItem(DAILY_KEY, JSON.stringify(all));
+    } catch (e) {
+      return false;
+    }
+    return true;
+  }
+
+  /* ---------- daily chrome ---------- */
+
+  function shareLine(secs) {
+    var where = window.location.origin + window.location.pathname;
+    return 'Minesweeper Daily ' + dailyDate + ' · ' + difficulty + ' · ' + secs + 's\n' +
+           where + '?d=' + dailyDate + '&level=' + difficulty;
+  }
+
+  function showShare(secs) {
+    shareTextEl.textContent = shareLine(secs);
+    shareEl.hidden = false;
+    shareCopyEl.textContent = 'Copy';
+  }
+
+  function hideShare() {
+    shareEl.hidden = true;
+    shareTextEl.textContent = '';
+  }
+
+  function renderMode() {
+    modeBtns.forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+    });
+    var isDaily = mode === 'daily';
+    dailyEl.hidden = !isDaily;
+    if (isDaily) dailyDateEl.textContent = dailyDate;
+    bestLabel.textContent = isDaily ? 'Today' : 'Best';
+  }
+
+  // Daily mode is addressable rather than remembered. Keeping it out of
+  // localStorage means a shared link is the only thing that puts you on a
+  // shared board, and a plain visit is never silently on yesterday's puzzle.
+  function readUrl() {
+    var q;
+    try {
+      q = new URLSearchParams(window.location.search);
+    } catch (e) {
+      q = null;
+    }
+    var d = q && q.get('d');
+    var m = q && q.get('mode');
+    var level = q && q.get('level');
+
+    dailyDate = validDate(d) ? d : utcToday();
+    if (validDate(d) || m === 'daily') mode = 'daily';
+    if (level && DIFFICULTIES[level]) difficulty = level;
+  }
+
+  function pushUrl() {
+    if (!window.history || !window.history.replaceState) return;
+    var url = window.location.pathname;
+    if (mode === 'daily') url += '?d=' + dailyDate + '&level=' + difficulty;
+    try {
+      window.history.replaceState(null, '', url);
+    } catch (e) {
+      /* file:// and friends throw here; the game does not depend on it. */
+    }
   }
 
   /* ---------- setup ---------- */
@@ -120,11 +316,23 @@
       b.setAttribute('aria-pressed', String(b.dataset.difficulty === difficulty));
     });
 
+    renderMode();
     renderBest();
     buildGrid();
+    hideShare();
     faceEl.textContent = '🙂';
-    setStatus('Left-click to reveal. Right-click to flag.', '');
     updateMineCount();
+
+    if (mode === 'daily') {
+      dailyAnchor = dealDaily();
+      // Opened directly rather than through reveal(), so the clock does not
+      // start on a move the player did not make.
+      floodFrom(dailyAnchor);
+      setStatus('Daily board for ' + dailyDate + '. Everyone gets this one.', '');
+    } else {
+      dailyAnchor = -1;
+      setStatus('Left-click to reveal. Right-click to flag.', '');
+    }
   }
 
   function buildGrid() {
@@ -144,7 +352,10 @@
     boardEl.appendChild(frag);
   }
 
-  function placeMines(safeIdx) {
+  // `rand` is the source of randomness, defaulting to Math.random. Daily mode
+  // passes a seeded stream instead; nothing else about the deal differs.
+  function placeMines(safeIdx, rand) {
+    rand = rand || Math.random;
     var exclude = {};
     exclude[safeIdx] = true;
     neighbors(safeIdx).forEach(function (n) { exclude[n] = true; });
@@ -160,7 +371,7 @@
     }
 
     for (var k = 0; k < mineCount; k++) {
-      var r = k + Math.floor(Math.random() * (pool.length - k));
+      var r = k + Math.floor(rand() * (pool.length - k));
       var t = pool[k]; pool[k] = pool[r]; pool[r] = t;
       board[pool[k]].mine = true;
     }
@@ -239,10 +450,11 @@
     var cell = board[idx];
     if (cell.state !== 'hidden') return;
 
-    if (!seeded) {
-      placeMines(idx);
-      startTimer();
-    }
+    if (!seeded) placeMines(idx);
+    // The clock starts on the player's first move. In random mode that is the
+    // same moment the mines are placed; in daily mode the mines were already
+    // dealt and a region already opened, so the two have to be separate.
+    if (!startTime) startTimer();
 
     if (cell.mine) {
       cell.state = 'revealed';
@@ -251,6 +463,12 @@
       return;
     }
 
+    floodFrom(idx);
+  }
+
+  // Reveals idx and, if it is blank, everything its blank region touches.
+  // Timer-free and mine-free: callers own both.
+  function floodFrom(idx) {
     var stack = [idx];
     while (stack.length) {
       var i = stack.pop();
@@ -329,6 +547,16 @@
     boardEl.classList.add('over');
     faceEl.textContent = '😎';
     var secs = elapsed();
+
+    if (mode === 'daily') {
+      var faster = recordDaily(secs);
+      renderBest();
+      showShare(secs);
+      setStatus('Cleared! ' + mineCount + ' mines in ' + secs + ' seconds — ' +
+                'the ' + dailyDate + ' daily.' + (faster ? ' Your fastest run of it.' : ''), 'win');
+      return;
+    }
+
     var improved = recordBest(secs);
     setStatus('Cleared! ' + mineCount + ' mines in ' + secs + ' seconds.' +
               (improved ? ' A new best.' : ''), 'win');
@@ -387,7 +615,37 @@
   faceEl.addEventListener('click', function () { newGame(); });
 
   diffBtns.forEach(function (b) {
-    b.addEventListener('click', function () { newGame(b.dataset.difficulty); });
+    b.addEventListener('click', function () {
+      newGame(b.dataset.difficulty);
+      pushUrl();
+    });
+  });
+
+  modeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      mode = b.dataset.mode === 'daily' ? 'daily' : 'random';
+      // Leaving a past daily by way of Random and coming back should land on
+      // today, not on the date the link arrived with.
+      if (mode === 'daily') dailyDate = validDate(dailyDate) ? dailyDate : utcToday();
+      newGame();
+      pushUrl();
+    });
+  });
+
+  shareCopyEl.addEventListener('click', function () {
+    var text = shareTextEl.textContent;
+    // Clipboard access is permissioned and absent on http://, so the button
+    // reports what happened rather than assuming. The text is on screen and
+    // selectable either way.
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      shareCopyEl.textContent = 'Select it';
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      shareCopyEl.textContent = 'Copied';
+    }, function () {
+      shareCopyEl.textContent = 'Select it';
+    });
   });
 
   document.addEventListener('keydown', function (e) {
@@ -408,12 +666,35 @@
         flags: flags, revealed: revealed,
         remaining: total - mineCount - revealed,
         best: bestFor(difficulty),
-        bestShown: bestEl.textContent
+        bestShown: bestEl.textContent,
+        mode: mode,
+        date: dailyDate,
+        anchor: dailyAnchor,
+        seed: mode === 'daily' ? seedFor(dailyDate, difficulty) : null,
+        daily: dailyResult()
       };
     },
     mineAt: function (i) { return board[i].mine; },
-    bests: readBests
+    // The whole minefield as one comparable string — '1' mine, '0' not. Two
+    // deals are the same deal exactly when these match.
+    layout: function () {
+      var out = '';
+      for (var i = 0; i < total; i++) out += board[i].mine ? '1' : '0';
+      return out;
+    },
+    shareText: function () { return shareEl.hidden ? null : shareTextEl.textContent; },
+    // Drives the date without waiting for tomorrow.
+    setDailyDate: function (d) {
+      if (!validDate(d)) return false;
+      dailyDate = d;
+      mode = 'daily';
+      newGame();
+      return true;
+    },
+    bests: readBests,
+    dailies: readDailies
   };
 
-  newGame('beginner');
+  readUrl();
+  newGame(difficulty);
 })();

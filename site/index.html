@@ -50,19 +50,33 @@
       <button type="button" class="diff-btn" data-difficulty="expert">Expert<span>30 × 16 · 99</span></button>
     </div>
 
+    <div class="mode" role="group" aria-label="Board">
+      <button type="button" class="mode-btn" data-mode="random" aria-pressed="true">Random</button>
+      <button type="button" class="mode-btn" data-mode="daily" aria-pressed="false">Daily</button>
+    </div>
+
+    <p class="daily" id="daily-line" hidden>
+      Daily board for <b id="daily-date"></b> &middot; the same minefield for everyone, all day.
+    </p>
+
     <div class="frame">
       <div class="hud">
         <div class="readout" id="mine-count" aria-label="Mines remaining" role="status">010</div>
         <button type="button" class="face" id="reset" aria-label="New game" title="New game">🙂</button>
         <div class="readout" id="timer" aria-label="Time elapsed" role="status">000</div>
       </div>
-      <p class="best" role="status" aria-live="polite">Best <span class="best-time" id="best-time">&mdash;</span></p>
+      <p class="best" role="status" aria-live="polite"><span id="best-label">Best</span> <span class="best-time" id="best-time">&mdash;</span></p>
       <div class="board-wrap">
         <div class="board" id="board" role="grid" aria-label="Minefield"></div>
       </div>
     </div>
 
     <p class="status" id="status" role="status" aria-live="polite">Left-click to reveal. Right-click to flag.</p>
+
+    <div class="share" id="share" hidden>
+      <pre id="share-text"></pre>
+      <button type="button" id="share-copy">Copy</button>
+    </div>
 
     <details class="help">
       <summary>How to play</summary>
@@ -73,6 +87,9 @@
         <li>A number counts the mines in the eight neighbouring squares.</li>
         <li>Your first click is always safe — it opens a region.</li>
         <li>Reveal every square that is not a mine to win.</li>
+        <li><b>Daily</b> deals one shared board per UTC date, opened on the same
+            square for everybody, so two times are worth comparing. Its link
+            carries the date — send it and your opponent gets your minefield.</li>
       </ul>
     </details>
 
