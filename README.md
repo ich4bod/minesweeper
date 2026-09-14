@@ -5,6 +5,17 @@ no JavaScript framework — three files under `site/` are the whole game.
 
 Live: <https://minesweeper.ichabod-crane.net>
 
+## Run locally
+
+Docker is the only prerequisite. From the repository root:
+
+```sh
+docker build -t minesweeper .
+docker run --rm -p 3000:3000 minesweeper
+```
+
+Open <http://localhost:3000>. Stop the foreground container with `Ctrl-C`.
+
 ## Rules implemented
 
 - Left-click reveals, right-click flags, long-press flags on touch.
