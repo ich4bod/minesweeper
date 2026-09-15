@@ -204,6 +204,7 @@ async function main() {
     check('best label reads Today in daily mode',
       (await page.locator('#best-label').textContent()) === 'Today');
     check('no record for today yet', (await page.locator('#best-time').textContent()) === '—');
+    check('the share control is hidden before a win', await page.locator('#share').isHidden());
     check('the clock has not started on a move the player did not make',
       (await page.locator('#timer').textContent()) === '000',
       await page.locator('#timer').textContent());
@@ -258,6 +259,26 @@ async function main() {
     check('the share line carries the time', share.includes(secs + 's'), share);
     check('the share line carries a link back to this exact board',
       share.includes('?d=' + today + '&level=beginner'), share);
+    check('the share control is visible after a win', await page.locator('#share').isVisible());
+
+    // Clipboard permission is granted only to this isolated test context. This
+    // proves the actual button path, while the application still shows
+    // selectable text when a player's browser declines clipboard access.
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: new globalThis.URL(URL).origin
+    });
+    await page.locator('#share-copy').click();
+    check('Copy writes the complete daily result to the clipboard',
+      (await page.evaluate(() => navigator.clipboard.readText())) === share);
+
+    // The default viewport above is the wide-layout check. The share row wraps
+    // at phone width, so prove its button remains visible and actionable there.
+    await page.setViewportSize({ width: 375, height: 860 });
+    const copyBox = await page.locator('#share-copy').boundingBox();
+    check('Copy remains visible at a narrow viewport',
+      copyBox && copyBox.width > 0 && copyBox.height > 0 && copyBox.x >= 0 &&
+        copyBox.x + copyBox.width <= 375,
+      copyBox && JSON.stringify(copyBox));
 
     // The daily record must not have leaked into the lifetime best-times store.
     const bests = await page.evaluate(() => window.minesweeper.bests());
