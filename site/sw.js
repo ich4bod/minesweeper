@@ -88,7 +88,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    fetch(req)
+    // `fetch(req)` can be satisfied by the browser's HTTP cache before it
+    // reaches nginx. `no-store` makes network-first mean the network, not
+    // merely a cache that happens to sit below this worker.
+    fetch(req, { cache: 'no-store' })
       .then(async (res) => {
         // Opaque and error responses are not worth storing; a cached 404 would
         // outlive the deploy that fixed it.

@@ -15,7 +15,7 @@
 # The container is restored on every exit path, including failure.
 set -uo pipefail
 
-APP=/srv/ichabod/apps/minesweeper
+APP=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 URL=${1:-https://minesweeper.ichabod-crane.net/}
 IMAGE=mcr.microsoft.com/playwright:v1.55.0-noble
 PROFILE=$APP/.verify/profile
