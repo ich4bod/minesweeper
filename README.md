@@ -5,6 +5,8 @@ no JavaScript framework — three files under `site/` are the whole game.
 
 Live: <https://minesweeper.ichabod-crane.net>
 
+Data: disposable; game state and times live only in each visitor's browser.
+
 ## Run locally
 
 Docker is the only prerequisite. From the repository root:

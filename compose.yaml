@@ -2,25 +2,16 @@ name: minesweeper
 
 services:
   web:
-    build:
-      context: .
-      args:
-        OCI_REVISION: ${OCI_REVISION:?set the checked-out source revision before building}
-        OCI_CREATED: ${OCI_CREATED:?set the release timestamp before building}
+    build: .
     restart: unless-stopped
-    # No published host port. Traefik reaches the container over the proxy
-    # network, so exposing one would only open a second, unrouted door.
     expose:
       - "3000"
     networks:
       - proxy
     labels:
-      - org.opencontainers.image.revision=${OCI_REVISION:?set the checked-out source revision before building}
-      - org.opencontainers.image.created=${OCI_CREATED:?set the release timestamp before building}
       - traefik.enable=true
       - "traefik.http.routers.minesweeper.rule=Host(`minesweeper.ichabod-crane.net`)"
-      - traefik.http.routers.minesweeper.entrypoints=websecure
-      - traefik.http.routers.minesweeper.tls.certresolver=letsencrypt
+      - traefik.http.routers.minesweeper.entrypoints=web
       - traefik.http.services.minesweeper.loadbalancer.server.port=3000
     cpus: "0.50"
     mem_limit: 512m
